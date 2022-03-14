@@ -1,5 +1,5 @@
 {
-    "Eb_N0": 0,
+    "Eb_N0": 10,
     "G_T": 0,
     "Max_BER": 0,
     "Max_ SER": 0,
@@ -7,5 +7,6 @@
     "Mod_Scheme": "QPSK",
     "Sensitivity": 0,
     "Ant_Gain": 0,
-    "Free_Space_Loss": 0
+    "Free_Space_Loss": 0,
+    "Signal_Pwr": 1
 }
