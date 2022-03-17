@@ -11,12 +11,23 @@ fclose(fid);
 config = jsondecode(config_json);
 %% Setup
 rng(SEED);
+tx = txsite("CoordinateSystem", "cartesian", "AntennaPosition", [0;0;0], ...
+    "TransmitterFrequency", config.Freq, ...
+    "TransmitterPower", config.Tx_Power + config.Ant_Gain);
+rx = rxsite("CoordinateSystem", "cartesian", "AntennaPosition", [config.Target_Distance;0;0], ...
+    "ReceiverSensitivity", config.Receiver_Sensitivity);
+signalStrength = sigstrength(rx, tx, "freespace");
+fprintf("Signal Strength at Receiver: %d dBm\n", signalStrength);
+noiseFloorVec = (-120:0.5:-90)';
+snrVec = signalStrength - noiseFloorVec;
+EbNoVec = snrVec - 10*log10(config.Target_Data_Rate/config.Bandwidth);
 channel = comm.AWGNChannel("VarianceSource", "Input port", ...
     "NoiseMethod", "Variance");
-errorRate = comm.ErrorRate("ResetInputPort", true);
-EbNoVec = (-45:-30)';
-snrVec = EbNoVec + 10*log10(config.Target_Data_Rate/config.Bandwidth);
-berVec = zeros(length(EbNoVec),3);
+bitErrRate = comm.ErrorRate("ResetInputPort", true);
+symErrRate = comm.ErrorRate("ResetInputPort", true);
+% snrVec = EbNoVec + 10*log10(config.Target_Data_Rate/config.Bandwidth);
+berVec = zeros(length(noiseFloorVec),3);
+serVec = zeros(length(noiseFloorVec),3);
 dataIn = randi([0,1], 1e6, 1);
 %% Simulation
 if contains(config.Mod_Scheme, "QPSK")
@@ -24,22 +35,37 @@ if contains(config.Mod_Scheme, "QPSK")
     k = log2(M);
     qpskMod = comm.QPSKModulator('BitInput',true);
     qpskDemod = comm.QPSKDemodulator('BitOutput',true);
-    for i = 1:length(EbNoVec)
+    txfilter = comm.RaisedCosineTransmitFilter;
+    rxfilter = comm.RaisedCosineReceiveFilter;
+    for i = 1:length(noiseFloorVec)
         snr = snrVec(i);
-        txSig = qpskMod(dataIn);
+        qpskTx = qpskMod(dataIn);
+        txSig = txfilter(qpskTx);
         powerDB = 10*log10(var(txSig));
         noiseVar = 10.^(0.1*(powerDB-snr));
         rxSig = channel(txSig, noiseVar);
-        dataOut = qpskDemod(rxSig);
-        berVec(i,:) = errorRate(dataIn, dataOut, 1);
+        qpskRx = rxfilter(rxSig);
+        dataOut = qpskDemod(qpskRx);
+        berVec(i,:) = bitErrRate(dataIn, dataOut, 1);
+        serVec(i,:) = symErrRate(qpskTx, qpskRx, 1);
     end
-    berTheory = berawgn(EbNoVec,'psk',M,'nondiff');
+    berTheory = berawgn(EbNoVec, 'psk', M, 'nondiff');
 end
 figure
 semilogy(EbNoVec,berVec(:,1),'*')
 hold on
 semilogy(EbNoVec,berTheory)
+title('BER');
 legend('Simulation','Theory','Location','Best')
+xlabel('Eb/No (dB)')
+ylabel('Bit Error Rate')
+grid on
+hold off
+
+figure
+semilogy(EbNoVec,serVec(:,1),'*')
+hold on
+title('SER');
 xlabel('Eb/No (dB)')
 ylabel('Bit Error Rate')
 grid on

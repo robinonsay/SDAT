@@ -7,9 +7,11 @@
     "Target_Distance": 1e6,
     "Min_Link_Margin": 3,
     "Mod_Scheme": "QPSK",
-    "Pulse_Shaping_Filter": "Root Raised Cosine",
+    "Pulse_Shaping_Filter": "root raised cosine",
     "Sensitivity": -117,
     "Ant_Gain": 14,
-    "Signal_Power": 33,
-    "Bandwidth": 50
+    "Tx_Power": 33,
+    "Receiver_Sensitivity": -117,
+    "Bandwidth": 50,
+    "Freq": 7.75e9
 }
