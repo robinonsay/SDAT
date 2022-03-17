@@ -1,11 +1,15 @@
 {
-    "Eb_N0": 0,
     "G_T": 0,
-    "Max_BER": 0,
-    "Max_ SER": 0,
-    "Min_Data_Rate": 0,
+    "Max_BER": 1e-9,
+    "Max_ SER": 1e-3,
+    "Min_Data_Rate": 1.6e6,
+    "Target_Data_Rate": 20e6,
+    "Target_Distance": 1e6,
+    "Min_Link_Margin": 3,
     "Mod_Scheme": "QPSK",
-    "Sensitivity": 0,
-    "Ant_Gain": 0,
-    "Free_Space_Loss": 0
+    "Pulse_Shaping_Filter": "Root Raised Cosine",
+    "Sensitivity": -117,
+    "Ant_Gain": 14,
+    "Signal_Power": 33,
+    "Bandwidth": 50
 }
