@@ -14,64 +14,93 @@ rng(SEED);  % Set random number generator seed
 R = config.Target_Dist;  % Distance from transmitter to reciever
 lambda = physconst('LightSpeed')/config.Freq;  % Wavelength
 Lfs = fspl(R, lambda);  % Free-space path loss
+% Calculate Link Margin and Link Budget
 LB = config.Tx_Power + config.Ant_Gain * 2 - Lfs;  % Link Budget Calc
 fprintf("Link Budget (%.2e m): %.2e dB\n", R, LB);
 LM = LB - config.Receiver_Sensitivity;  % Link Margin Calc
 fprintf("Link Margin (%.2e m): %.2e dB\n", R, LM);
-noiseFloorVec = (-200:-50)';  % Estimated noise floor of background radiation
-minEbNo = config.Receiver_Sensitivity + config.Min_Link_Margin - noiseFloorVec(end) - ...
-    10*log10(config.Target_Data_Rate/config.Bandwidth);  % Minimum EbNo for reciever
-snrVec = LB - noiseFloorVec;  % Signal-to-Noise Ratio vector
-EbNoVec = snrVec - 10*log10(config.Target_Data_Rate/config.Bandwidth);  % Eb/No from SNR
+% Initialize Channel Model
 channel = comm.AWGNChannel("VarianceSource", "Input port", ...
-    "NoiseMethod", "Variance");  % Define noisy channel
-% Research channel models (using best-case awgn
-thNoise = comm.ThermalNoise;  % Define Thermal Noise
-evm = comm.EVM;  % Define Error Vector Magnitude Calculator
-% Initialize output vectors
-berVec = zeros(length(snrVec),1);
-serVec = zeros(length(snrVec),1);
-evmVec = zeros(length(snrVec), 1);
-dataIn = randi([0,1], 1e6, 1);  % Bernoulii Distribution of random bits
-%% Simulation
-if contains(config.Mod_Scheme, "QPSK")
+    "NoiseMethod", "Variance");
+% Define Error Vector Magnitude Calculator
+evm = comm.EVM;
+if contains(config.Mod_Scheme, "QPSK", 'IgnoreCase', true)
     M = 4;  % Modulation Alphabet
     k = log2(M);  % Bits per symbol
-    qpskMod = comm.QPSKModulator('BitInput',true);  % Define QPSK modulator
-    qpskDemod = comm.QPSKDemodulator('BitOutput',true);  % Define QPSK demodulator
-%     txfilter = comm.RaisedCosineTransmitFilter("RolloffFactor", 0.35, ...
-%         "FilterSpanInSymbols", 10, "OutputSamplesPerSymbol", 10);
-%     rxfilter = comm.RaisedCosineReceiveFilter("RolloffFactor", 0.35, ...
-%         "FilterSpanInSymbols", 10, "InputSamplesPerSymbol", 10, ...
-%         "DecimationFactor", 10);
-    berTheory = berawgn(EbNoVec, 'psk', M, 'nondiff');  % Theoretical BER from Eb/No
-    for i = 1:length(snrVec)
-        snr = snrVec(i);  % SNR
-        qpskTx = qpskMod(dataIn);  % QPSK modulated data
-        powerDB = 10*log10(var(qpskTx));  % Power of signal
-        noiseVar = 10.^(0.1*(powerDB-snr));  % Noise Variance of signal
-%         txSig = txfilter(qpskTx);
-        txSig = qpskTx;
-        rxSig = channel(txSig, noiseVar);  % Send signal over noisy channel with added thermal noise
-%         qpskRx = rxfilter(rxSig);
-        qpskRx = rxSig;
-        dataOut = qpskDemod(qpskRx);  % Demodulate signal
-        % Calculate Outputs
-        [berrNum, ber] = biterr(dataIn, dataOut);
-        berVec(i) = ber;
-        [serrNum, ser] = symerr(qpskTx, qpskRx);
-        serVec(i) = ser;
-        evmVec(i) = evm(txSig, rxSig);
-    end
+    modulator = comm.QPSKModulator('BitInput',true);  % Define QPSK modulator
+    demodulator = comm.QPSKDemodulator('BitOutput',true);  % Define QPSK demodulator
+else
+    error("Invalid Modulation Scheme");
 end
-
+txfilter = comm.RaisedCosineTransmitFilter("RolloffFactor", 0.35, ...
+    "FilterSpanInSymbols", 10, "OutputSamplesPerSymbol", 10);
+rxfilter = comm.RaisedCosineReceiveFilter("RolloffFactor", 0.35, ...
+    "FilterSpanInSymbols", 10, "InputSamplesPerSymbol", 10, ...
+    "DecimationFactor", 10);
+%-------------------------
+% https://www.dsprelated.com/showarticle/168.php?msclkid=dd85b998a7bb11ec8b9235e20eafce8c
+Rs = config.Target_Data_Rate/k;
+Rb = config.Target_Data_Rate;
+Ps = LB;
+Pn = (config.Receiver_Sensitivity:-50)';  % Estimated noise floor of background radiation
+SNR = Ps - Pn;
+No = Pn - 10*log10(config.Bandwidth);
+Es = Ps - 10*log10(Rs);
+Eb = Es - 10*log10(k);
+EbNo = Eb - No;
+minEbNo = config.Receiver_Sensitivity + config.Min_Link_Margin ...
+    - 10*log10(Rs) - 10*log10(k) - No(end);
+%-------------------------
+% Initialize output vectors
+berVec = zeros(length(Pn),1);
+serVec = zeros(length(Pn),1);
+evmVec = zeros(length(Pn), 1);
+%% Simulation
+berTheory = berawgn(EbNo, 'psk', M, 'nondiff');  % Theoretical BER from Eb/No
+isLDPC = false;
+if contains(config.FEC.Method, "LDPC", "IgnoreCase", true)
+    fprintf("FEC Method: LDPC\nLDPC Config:\n");
+    disp(config.FEC);
+    H = dvbs2ldpc(config.FEC.Code_Rate);
+    maxnumiter = 10;
+    cfgLDPCEnc = ldpcEncoderConfig(H);
+    cfgLDPCDec = ldpcDecoderConfig(cfgLDPCEnc);
+    infoBits = randi([0,1], cfgLDPCEnc.NumInformationBits, 1, 'int8');  % Uniform Distribution
+    dataIn = ldpcEncode(infoBits, cfgLDPCEnc);
+    isLDPC = true;
+else
+    infoBits = randi([0,1], 2^20, 1, 'int8');
+    dataIn = infoBits;
+end
+for i = 1:length(SNR)
+    snr = SNR(i);  % SNR
+    modTx = modulator(dataIn);  % QPSK modulated data
+    powerDB = 10*log10(var(modTx));  % Power of signal
+    noiseVar = 10.^(0.1*(powerDB-snr));  % Noise Variance of signal
+%     txSig = txfilter(modTx);
+    txSig = modTx;
+    rxSig = channel(txSig, noiseVar);  % Send signal over noisy channel
+%     modRx = rxfilter(rxSig);
+    modRx = rxSig;
+    dataOut = demodulator(modRx);  % Demodulate signal
+    if isLDPC
+        rxInfoBits = ldpcDecode(dataOut, cfgLDPCDec, maxnumiter);
+    else
+        rxInfoBits = dataOut;
+    end
+    % Calculate Outputs
+    [berrNum, ber] = biterr(infoBits, rxInfoBits);
+    berVec(i) = ber;
+    [serrNum, ser] = symerr(modTx, modRx);
+    serVec(i) = ser;
+    evmVec(i) = evm(modTx, modRx);
+end
 %% Plot Figures
 % Plot BER
-berVec(berVec==0) = 1e-10;
 figure;
-semilogy(EbNoVec,berVec(:,1));
+semilogy(EbNo,berVec(:,1));
 hold on;
-semilogy(EbNoVec,berTheory);
+semilogy(EbNo,berTheory);
 xline(minEbNo, '-', 'Minimum Eb/No');
 yline(config.Max_BER, '-', 'Maximum BER');
 ylim([1e-10, 1e0]);
@@ -83,7 +112,7 @@ grid on;
 hold off;
 % Plot SER
 figure;
-semilogy(EbNoVec,serVec);
+semilogy(EbNo,serVec);
 hold on;
 title('SER vs Eb/No');
 xlabel('Eb/No (dB)');
@@ -94,7 +123,7 @@ grid on;
 hold off;
 % Plot EVM
 figure;
-semilogy(EbNoVec,evmVec);
+semilogy(EbNo,evmVec);
 hold on;
 title('RMS EVM vs Eb/No');
 xlabel('Eb/No (dB)');

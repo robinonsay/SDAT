@@ -7,7 +7,9 @@
     "Target_Dist": 1e6,
     "Min_Link_Margin": 3,
     "Mod_Scheme": "QPSK",
-    "Sensitivity": -117,
+    "FEC": {
+        "Method": "None"
+    },
     "Ant_Gain": 14.3,
     "Tx_Power": 33,
     "Receiver_Sensitivity": -117,
