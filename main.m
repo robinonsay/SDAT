@@ -1,5 +1,6 @@
 %% Constants
 SEED = 3165;
+MAX_DIST_TO_MARS = 400.4e9;
 %% Import Config File
 config_name = input("Config File Name? ", "s");
 if isempty(config_name)
@@ -24,10 +25,8 @@ maxLfs = config.Tx_Power + 2*config.Ant_Gain - config.Min_Link_Margin ...
     - config.Receiver_Sensitivity;
 maxR = (lambda/(4*pi))*10^(maxLfs/20);
 fprintf("Comm. Range: %.2e m\n", maxR);
+fprintf("Min. Number of Nodes: %d\n", MAX_DIST_TO_MARS/maxR);
 minLB = config.Tx_Power + config.Ant_Gain * 2 - maxLfs;
-% Initialize Channel Model
-channel = comm.AWGNChannel("VarianceSource", "Input port", ...
-    "NoiseMethod", "Variance");
 % Define BER and EVM Calculators
 ber = comm.ErrorRate("ResetInputPort", true);
 ser = comm.ErrorRate("ResetInputPort", true);
@@ -38,6 +37,8 @@ if contains(config.Mod_Scheme, "QPSK", 'IgnoreCase', true)
     modulator = comm.QPSKModulator('BitInput',true);
     % Define QPSK demodulator
     isQPSK = true;
+    % Initialize Channel Model
+    channel = comm.AWGNChannel("BitsPerSymbol", k);
 else
     error("Invalid Modulation Scheme");
 end
@@ -88,8 +89,9 @@ else
     num_frames = (10/config.Max_BER) / bits_per_frame + 1;
 end
 %% Simulation
-berTheory = berawgn(EbNo, 'psk', M, 'nondiff');  % Theoretical BER from Eb/No
+[berTheory, serTheory] = berawgn(EbNo, 'psk', M, 'nondiff');  % Theoretical BER from Eb/No
 for i = 1:length(SNR)
+    channel.EbNo = EbNo(i);
     snr = SNR(i);  % SNR
     evm = comm.EVM;
     if isQPSK
@@ -102,23 +104,24 @@ for i = 1:length(SNR)
         end
     end
     for counter = 1:num_frames
-        data_in = randi([0 1], bits_per_frame, 1, "int8");
         if isLDPC
+            data_in = randi([0 1], bits_per_frame, 1, "int8");
             encodedData = ldpcEncode(data_in, cfgLDPCEnc);
         else
+            data_in = randi([0 1], bits_per_frame, 1);
             encodedData = data_in;
         end
         modTx = modulator(encodedData);
 %         txSig = txfilter(modTx);
         txSig = modTx;
-        rxSig = awgn(txSig, snr);
+        rxSig = channel(txSig);
         modRx = rxSig;
 %         modRx = rxfilter(rxSig);
         demodRx = demodulator(modRx);
         if isLDPC
             [data_out, actual_iter, fpc] = ldpcDecode(demodRx, cfgLDPCDec, maxnumiter);
         else
-            data_out = cast(demodRx, "int8");
+            data_out = demodRx;
         end
         errStats = ber(data_in, data_out, false);
         serStats = ser(modTx, modRx, false);
@@ -139,7 +142,7 @@ hold on;
 semilogy(EbNo,berTheory);
 xline(minEbNo, '-', 'Minimum Eb/No');
 yline(config.Max_BER, '-', 'Maximum BER');
-ylim([1e-10, 1e0]);
+ylim([1e-10, 1]);
 title('BER vs Eb/No');
 legend('Simulation','Theory','Location','Best');
 xlabel('Eb/No (dB)');
@@ -150,10 +153,12 @@ hold off;
 figure;
 semilogy(EbNo,serVec(:,1));
 hold on;
+semilogy(EbNo, serTheory);
 title('SER vs Eb/No');
+legend('Simulation','Theory','Location','Best');
 xlabel('Eb/No (dB)');
 ylabel('Symbol Error Rate');
-ylim([1e-5, 1e5]);
+ylim([1e-10, 1]);
 yline(config.Max_SER, '-', 'Maximum SER');
 grid on;
 hold off;
