@@ -11,7 +11,7 @@
         "Method": "LDPC",
         "Code_Rate": "1/2"
     },
-    "Ant_Gain": 14.3,
+    "Ant_Gain": 49,
     "Tx_Power": 33,
     "Receiver_Sensitivity": -117,
     "Bandwidth": 50e6,

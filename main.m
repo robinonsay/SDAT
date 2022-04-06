@@ -27,11 +27,16 @@ evm = comm.EVM;
 if contains(config.Mod_Scheme, "QPSK", 'IgnoreCase', true)
     M = 4;  % Modulation Alphabet
     k = log2(M);  % Bits per symbol
-    modulator = comm.QPSKModulator('BitInput',true);  % Define QPSK modulator
-    demodulator = comm.QPSKDemodulator('BitOutput',true);  % Define QPSK demodulator
+    % Define QPSK modulator
+    modulator = comm.QPSKModulator('BitInput',true);
+    % Define QPSK demodulator
+    demodulator = comm.QPSKDemodulator('BitOutput',true);
+    fprintf("Spectral Efficiency: %d bits/Hz\n", ...
+        mpsk_efficiency(config.Target_Data_Rate, M));
 else
     error("Invalid Modulation Scheme");
 end
+% Based CCSDS RRC filter (Matt)
 txfilter = comm.RaisedCosineTransmitFilter("RolloffFactor", 0.35, ...
     "FilterSpanInSymbols", 10, "OutputSamplesPerSymbol", 10);
 rxfilter = comm.RaisedCosineReceiveFilter("RolloffFactor", 0.35, ...
@@ -55,33 +60,37 @@ minEbNo = config.Receiver_Sensitivity + config.Min_Link_Margin ...
 berVec = zeros(length(Pn),1);
 serVec = zeros(length(Pn),1);
 evmVec = zeros(length(Pn), 1);
-%% Simulation
-berTheory = berawgn(EbNo, 'psk', M, 'nondiff');  % Theoretical BER from Eb/No
 isLDPC = false;
 if contains(config.FEC.Method, "LDPC", "IgnoreCase", true)
     fprintf("FEC Method: LDPC\nLDPC Config:\n");
     disp(config.FEC);
-    H = dvbs2ldpc(config.FEC.Code_Rate);
+    % Valid Code Rates: 1/4, 1/3, 2/5, 1/2, 3/5,
+    % 2/3, 3/4, 4/5, 5/6, 8/9, or 9/10
+    codeRate = eval(config.FEC.Code_Rate);
+    H = dvbs2ldpc(codeRate);
     maxnumiter = 10;
     cfgLDPCEnc = ldpcEncoderConfig(H);
     cfgLDPCDec = ldpcDecoderConfig(cfgLDPCEnc);
-    infoBits = randi([0,1], cfgLDPCEnc.NumInformationBits, 1, 'int8');  % Uniform Distribution
+    infoBits = randi([0 1], cfgLDPCEnc.NumInformationBits, 1, "int8");  % Uniform Distribution
     dataIn = ldpcEncode(infoBits, cfgLDPCEnc);
     isLDPC = true;
 else
-    infoBits = randi([0,1], 2^20, 1, 'int8');
+    infoBits = randi([0 1], 2^20, 1, "int8");
     dataIn = infoBits;
 end
+%% Simulation
+berTheory = berawgn(EbNo, 'psk', M, 'nondiff');  % Theoretical BER from Eb/No
 for i = 1:length(SNR)
     snr = SNR(i);  % SNR
     modTx = modulator(dataIn);  % QPSK modulated data
     powerDB = 10*log10(var(modTx));  % Power of signal
     noiseVar = 10.^(0.1*(powerDB-snr));  % Noise Variance of signal
-%     txSig = txfilter(modTx);
-    txSig = modTx;
+    txSig = txfilter(modTx); % Pulse Shaping Filter
+%     txSig = modTx;
     rxSig = channel(txSig, noiseVar);  % Send signal over noisy channel
-%     modRx = rxfilter(rxSig);
-    modRx = rxSig;
+%     rxSig = txSig;
+    modRx = rxfilter(rxSig);  % Pulse Shaping Filter
+%     modRx = rxSig;
     dataOut = demodulator(modRx);  % Demodulate signal
     if isLDPC
         rxInfoBits = ldpcDecode(dataOut, cfgLDPCDec, maxnumiter);
@@ -131,15 +140,17 @@ ylabel('RMS EVM');
 grid on;
 hold off;
 % Plot Link Margin
-d = (1e6:2e6);
+maxLfs = config.Tx_Power + 2*config.Ant_Gain - config.Min_Link_Margin ...
+    - config.Receiver_Sensitivity;
+maxR = (lambda/(4*pi))*10^(maxLfs/20);
+d = (maxR-1e6:maxR+1e6);
 Lfs = fspl(d, lambda);
 LB = config.Tx_Power + config.Ant_Gain * 2 - Lfs;
 LM = LB - config.Receiver_Sensitivity;
-commRange = interp1((LM-config.Min_Link_Margin), d, 0);
 figure;
 plot(d,LM);
 title('Link Margin vs Distance');
-xline(commRange, '-', 'Maximum Distance');
+xline(maxR, '-', 'Maximum Distance');
 yline(config.Min_Link_Margin, '-', 'Minimum Link Margin');
-ylabel('Link Margin (dB)'); xlabel('Distance (km)');
-fprintf("Comm. Range: %.2e m\n", commRange);
+ylabel('Link Margin (dB)'); xlabel('Distance (m)');
+fprintf("Comm. Range: %.2e m\n", maxR);
