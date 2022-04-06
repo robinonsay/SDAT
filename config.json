@@ -1,6 +1,6 @@
 {
     "G_T": 0,
-    "Max_BER": 1e-6,
+    "Max_BER": 1e-5,
     "Max_ SER": 1e-3,
     "Min_Data_Rate": 1.6e6,
     "Target_Data_Rate": 20e6,
@@ -9,7 +9,7 @@
     "Mod_Scheme": "QPSK",
     "FEC": {
         "Method": "LDPC",
-        "Code_Rate": "1/2"
+        "Code_Rate": "1/4"
     },
     "Ant_Gain": 14.3,
     "Tx_Power": 33,

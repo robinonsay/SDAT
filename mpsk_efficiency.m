@@ -10,8 +10,8 @@ function n = mpsk_efficiency(rb, M)
     if M<2 || mod(log2(M),1)~=0
     error('M must be a positive integral power of 2');
     end
-    bw = 2rb/log2(M);
+    bw = 2*rb/log2(M);
     bweff = rb/bw;
-    n = 2rb*bweff;
+    n = 2*rb*bweff;
 end
 

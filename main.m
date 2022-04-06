@@ -19,23 +19,30 @@ LB = config.Tx_Power + config.Ant_Gain * 2 - Lfs;  % Link Budget Calc
 fprintf("Link Budget (%.2e m): %.2e dB\n", R, LB);
 LM = LB - config.Receiver_Sensitivity;  % Link Margin Calc
 fprintf("Link Margin (%.2e m): %.2e dB\n", R, LM);
+% Recalculate LB/LM for max distance
+maxLfs = config.Tx_Power + 2*config.Ant_Gain - config.Min_Link_Margin ...
+    - config.Receiver_Sensitivity;
+maxR = (lambda/(4*pi))*10^(maxLfs/20);
+fprintf("Comm. Range: %.2e m\n", maxR);
+minLB = config.Tx_Power + config.Ant_Gain * 2 - maxLfs;
 % Initialize Channel Model
 channel = comm.AWGNChannel("VarianceSource", "Input port", ...
     "NoiseMethod", "Variance");
-% Define Error Vector Magnitude Calculator
-evm = comm.EVM;
+% Define BER and EVM Calculators
+ber = comm.ErrorRate("ResetInputPort", true);
+ser = comm.ErrorRate("ResetInputPort", true);
 if contains(config.Mod_Scheme, "QPSK", 'IgnoreCase', true)
     M = 4;  % Modulation Alphabet
     k = log2(M);  % Bits per symbol
     % Define QPSK modulator
     modulator = comm.QPSKModulator('BitInput',true);
     % Define QPSK demodulator
-    demodulator = comm.QPSKDemodulator('BitOutput',true);
-    fprintf("Spectral Efficiency: %d bits/Hz\n", ...
-        mpsk_efficiency(config.Target_Data_Rate, M));
+    isQPSK = true;
 else
     error("Invalid Modulation Scheme");
 end
+spectral_eff = mpsk_efficiency(config.Target_Data_Rate, M);
+fprintf("Spectral Efficiency: %.2e bits/Hz\n", spectral_eff);
 % Based CCSDS RRC filter (Matt)
 txfilter = comm.RaisedCosineTransmitFilter("RolloffFactor", 0.35, ...
     "FilterSpanInSymbols", 10, "OutputSamplesPerSymbol", 10);
@@ -46,8 +53,8 @@ rxfilter = comm.RaisedCosineReceiveFilter("RolloffFactor", 0.35, ...
 % https://www.dsprelated.com/showarticle/168.php?msclkid=dd85b998a7bb11ec8b9235e20eafce8c
 Rs = config.Target_Data_Rate/k;
 Rb = config.Target_Data_Rate;
-Ps = LB;
-Pn = (config.Receiver_Sensitivity:-50)';  % Estimated noise floor of background radiation
+Ps = minLB;
+Pn = (-180:-80)';  % Estimated noise floor of background radiation
 SNR = Ps - Pn;
 No = Pn - 10*log10(config.Bandwidth);
 Es = Ps - 10*log10(Rs);
@@ -57,55 +64,75 @@ minEbNo = config.Receiver_Sensitivity + config.Min_Link_Margin ...
     - 10*log10(Rs) - 10*log10(k) - No(end);
 %-------------------------
 % Initialize output vectors
-berVec = zeros(length(Pn),1);
-serVec = zeros(length(Pn),1);
+berVec = zeros(length(Pn),3);
+serVec = zeros(length(Pn),3);
 evmVec = zeros(length(Pn), 1);
+errStats = zeros(1,3);
 isLDPC = false;
+fprintf("FEC:\n");
+disp(config.FEC);
 if contains(config.FEC.Method, "LDPC", "IgnoreCase", true)
-    fprintf("FEC Method: LDPC\nLDPC Config:\n");
-    disp(config.FEC);
     % Valid Code Rates: 1/4, 1/3, 2/5, 1/2, 3/5,
     % 2/3, 3/4, 4/5, 5/6, 8/9, or 9/10
     codeRate = eval(config.FEC.Code_Rate);
     H = dvbs2ldpc(codeRate);
-    maxnumiter = 10;
+    maxnumiter = 50;
     cfgLDPCEnc = ldpcEncoderConfig(H);
     cfgLDPCDec = ldpcDecoderConfig(cfgLDPCEnc);
-    infoBits = randi([0 1], cfgLDPCEnc.NumInformationBits, 1, "int8");  % Uniform Distribution
-    dataIn = ldpcEncode(infoBits, cfgLDPCEnc);
+    bits_per_frame = cfgLDPCEnc.NumInformationBits;
+    num_frames = (10/config.Max_BER) / bits_per_frame + 1;
     isLDPC = true;
 else
-    infoBits = randi([0 1], 2^20, 1, "int8");
-    dataIn = infoBits;
+    % Default to 1 KB frames
+    bits_per_frame = 2^10;
+    num_frames = (10/config.Max_BER) / bits_per_frame + 1;
 end
 %% Simulation
 berTheory = berawgn(EbNo, 'psk', M, 'nondiff');  % Theoretical BER from Eb/No
 for i = 1:length(SNR)
     snr = SNR(i);  % SNR
-    modTx = modulator(dataIn);  % QPSK modulated data
-    powerDB = 10*log10(var(modTx));  % Power of signal
-    noiseVar = 10.^(0.1*(powerDB-snr));  % Noise Variance of signal
-    txSig = txfilter(modTx); % Pulse Shaping Filter
-%     txSig = modTx;
-    rxSig = channel(txSig, noiseVar);  % Send signal over noisy channel
-%     rxSig = txSig;
-    modRx = rxfilter(rxSig);  % Pulse Shaping Filter
-%     modRx = rxSig;
-    dataOut = demodulator(modRx);  % Demodulate signal
-    if isLDPC
-        rxInfoBits = ldpcDecode(dataOut, cfgLDPCDec, maxnumiter);
-    else
-        rxInfoBits = dataOut;
+    evm = comm.EVM;
+    if isQPSK
+        if isLDPC
+            demodulator = comm.QPSKDemodulator('BitOutput',true, ...
+                'DecisionMethod','Approximate log-likelihood ratio', ...
+                'Variance', 1/10^(snr/10));
+        else
+            demodulator = comm.QPSKDemodulator('BitOutput', true);
+        end
     end
-    % Calculate Outputs
-    [berrNum, ber] = biterr(infoBits, rxInfoBits);
-    berVec(i) = ber;
-    [serrNum, ser] = symerr(modTx, modRx);
-    serVec(i) = ser;
-    evmVec(i) = evm(modTx, modRx);
+    for counter = 1:num_frames
+        data_in = randi([0 1], bits_per_frame, 1, "int8");
+        if isLDPC
+            encodedData = ldpcEncode(data_in, cfgLDPCEnc);
+        else
+            encodedData = data_in;
+        end
+        modTx = modulator(encodedData);
+%         txSig = txfilter(modTx);
+        txSig = modTx;
+        rxSig = awgn(txSig, snr);
+        modRx = rxSig;
+%         modRx = rxfilter(rxSig);
+        demodRx = demodulator(modRx);
+        if isLDPC
+            [data_out, actual_iter, fpc] = ldpcDecode(demodRx, cfgLDPCDec, maxnumiter);
+        else
+            data_out = cast(demodRx, "int8");
+        end
+        errStats = ber(data_in, data_out, false);
+        serStats = ser(modTx, modRx, false);
+        evmStats = evm(modTx, modRx);
+    end
+    berVec(i, :) = errStats;
+    serVec(i, :) = serStats;
+    evmVec(i, :) = evmStats;
+    errStats = ber(data_in, data_out, true);
+    serStats = ser(modTx, modRx, true);
 end
 %% Plot Figures
 % Plot BER
+berVec(berVec==0) = 1e-100;
 figure;
 semilogy(EbNo,berVec(:,1));
 hold on;
@@ -121,7 +148,7 @@ grid on;
 hold off;
 % Plot SER
 figure;
-semilogy(EbNo,serVec);
+semilogy(EbNo,serVec(:,1));
 hold on;
 title('SER vs Eb/No');
 xlabel('Eb/No (dB)');
@@ -132,7 +159,7 @@ grid on;
 hold off;
 % Plot EVM
 figure;
-semilogy(EbNo,evmVec);
+semilogy(EbNo,evmVec(:, 1));
 hold on;
 title('RMS EVM vs Eb/No');
 xlabel('Eb/No (dB)');
@@ -140,9 +167,6 @@ ylabel('RMS EVM');
 grid on;
 hold off;
 % Plot Link Margin
-maxLfs = config.Tx_Power + 2*config.Ant_Gain - config.Min_Link_Margin ...
-    - config.Receiver_Sensitivity;
-maxR = (lambda/(4*pi))*10^(maxLfs/20);
 d = (maxR-1e6:maxR+1e6);
 Lfs = fspl(d, lambda);
 LB = config.Tx_Power + config.Ant_Gain * 2 - Lfs;
@@ -153,4 +177,3 @@ title('Link Margin vs Distance');
 xline(maxR, '-', 'Maximum Distance');
 yline(config.Min_Link_Margin, '-', 'Minimum Link Margin');
 ylabel('Link Margin (dB)'); xlabel('Distance (m)');
-fprintf("Comm. Range: %.2e m\n", maxR);
