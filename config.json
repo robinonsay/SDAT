@@ -1,6 +1,6 @@
 {
     "G_T": 0,
-    "Max_BER": 1e-3,
+    "Max_BER": 1e-6,
     "Max_ SER": 1e-3,
     "Min_Data_Rate": 1.6e6,
     "Target_Data_Rate": 20e6,

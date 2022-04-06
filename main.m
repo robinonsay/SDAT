@@ -27,9 +27,6 @@ maxR = (lambda/(4*pi))*10^(maxLfs/20);
 fprintf("Comm. Range: %.2e m\n", maxR);
 fprintf("Min. Number of Nodes: %d\n", MAX_DIST_TO_MARS/maxR);
 minLB = config.Tx_Power + config.Ant_Gain * 2 - maxLfs;
-% Define BER and EVM Calculators
-ber = comm.ErrorRate("ResetInputPort", true);
-ser = comm.ErrorRate("ResetInputPort", true);
 if contains(config.Mod_Scheme, "QPSK", 'IgnoreCase', true)
     M = 4;  % Modulation Alphabet
     k = log2(M);  % Bits per symbol
@@ -44,12 +41,19 @@ else
 end
 spectral_eff = mpsk_efficiency(config.Target_Data_Rate, M);
 fprintf("Spectral Efficiency: %.2e bits/Hz\n", spectral_eff);
-% Based CCSDS RRC filter (Matt)
-txfilter = comm.RaisedCosineTransmitFilter("RolloffFactor", 0.35, ...
-    "FilterSpanInSymbols", 10, "OutputSamplesPerSymbol", 10);
-rxfilter = comm.RaisedCosineReceiveFilter("RolloffFactor", 0.35, ...
-    "FilterSpanInSymbols", 10, "InputSamplesPerSymbol", 10, ...
-    "DecimationFactor", 10);
+% Based CCSDS RRC filter
+rolloff = 0.35;
+filtSpan = 10;
+sampPerSym = 10;
+txfilter = comm.RaisedCosineTransmitFilter("RolloffFactor", rolloff, ...
+    "FilterSpanInSymbols", filtSpan, "OutputSamplesPerSymbol", sampPerSym);
+rxfilter = comm.RaisedCosineReceiveFilter("RolloffFactor", rolloff, ...
+    "FilterSpanInSymbols", filtSpan, "InputSamplesPerSymbol", sampPerSym, ...
+    "DecimationFactor", sampPerSym);
+filtDelay = k * filtSpan;
+% Define BER and EVM Calculators
+ber = comm.ErrorRate("ReceiveDelay", filtDelay, "ResetInputPort", true);
+ser = comm.ErrorRate("ReceiveDelay", filtDelay, "ResetInputPort", true);
 %-------------------------
 % https://www.dsprelated.com/showarticle/168.php?msclkid=dd85b998a7bb11ec8b9235e20eafce8c
 Rs = config.Target_Data_Rate/k;
@@ -112,11 +116,11 @@ for i = 1:length(SNR)
             encodedData = data_in;
         end
         modTx = modulator(encodedData);
-%         txSig = txfilter(modTx);
-        txSig = modTx;
+        txSig = txfilter(modTx);
+%         txSig = modTx;
         rxSig = channel(txSig);
-        modRx = rxSig;
-%         modRx = rxfilter(rxSig);
+%         modRx = rxSig;
+        modRx = rxfilter(rxSig);
         demodRx = demodulator(modRx);
         if isLDPC
             [data_out, actual_iter, fpc] = ldpcDecode(demodRx, cfgLDPCDec, maxnumiter);
