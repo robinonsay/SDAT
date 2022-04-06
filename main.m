@@ -33,6 +33,7 @@ if contains(config.Mod_Scheme, "QPSK", 'IgnoreCase', true)
     % Define QPSK modulator
     modulator = comm.QPSKModulator('BitInput',true);
     % Define QPSK demodulator
+    demodulator = comm.QPSKDemodulator('BitOutput', true);
     isQPSK = true;
     % Initialize Channel Model
     channel = comm.AWGNChannel("BitsPerSymbol", k);
@@ -41,25 +42,15 @@ else
 end
 spectral_eff = mpsk_efficiency(config.Target_Data_Rate, M);
 fprintf("Spectral Efficiency: %.2e bits/Hz\n", spectral_eff);
-% Based CCSDS RRC filter
-rolloff = 0.35;
-filtSpan = 10;
-sampPerSym = 10;
-txfilter = comm.RaisedCosineTransmitFilter("RolloffFactor", rolloff, ...
-    "FilterSpanInSymbols", filtSpan, "OutputSamplesPerSymbol", sampPerSym);
-rxfilter = comm.RaisedCosineReceiveFilter("RolloffFactor", rolloff, ...
-    "FilterSpanInSymbols", filtSpan, "InputSamplesPerSymbol", sampPerSym, ...
-    "DecimationFactor", sampPerSym);
-filtDelay = k * filtSpan;
 % Define BER and EVM Calculators
-ber = comm.ErrorRate("ReceiveDelay", filtDelay, "ResetInputPort", true);
-ser = comm.ErrorRate("ReceiveDelay", filtDelay, "ResetInputPort", true);
+ber = comm.ErrorRate("ResetInputPort", true);
+ser = comm.ErrorRate("ResetInputPort", true);
 %-------------------------
 % https://www.dsprelated.com/showarticle/168.php?msclkid=dd85b998a7bb11ec8b9235e20eafce8c
 Rs = config.Target_Data_Rate/k;
 Rb = config.Target_Data_Rate;
 Ps = minLB;
-Pn = (-180:-80)';  % Estimated noise floor of background radiation
+Pn = (-150:-80)';  % Estimated noise floor of background radiation
 SNR = Ps - Pn;
 No = Pn - 10*log10(config.Bandwidth);
 Es = Ps - 10*log10(Rs);
@@ -98,14 +89,10 @@ for i = 1:length(SNR)
     channel.EbNo = EbNo(i);
     snr = SNR(i);  % SNR
     evm = comm.EVM;
-    if isQPSK
-        if isLDPC
-            demodulator = comm.QPSKDemodulator('BitOutput',true, ...
-                'DecisionMethod','Approximate log-likelihood ratio', ...
-                'Variance', 1/10^(snr/10));
-        else
-            demodulator = comm.QPSKDemodulator('BitOutput', true);
-        end
+    if isLDPC
+        demodulator = comm.QPSKDemodulator('BitOutput',true, ...
+            'DecisionMethod','Approximate log-likelihood ratio', ...
+            'Variance', 1/10^(snr/10));
     end
     for counter = 1:num_frames
         if isLDPC
@@ -116,14 +103,12 @@ for i = 1:length(SNR)
             encodedData = data_in;
         end
         modTx = modulator(encodedData);
-        txSig = txfilter(modTx);
-%         txSig = modTx;
+        txSig = modTx;
         rxSig = channel(txSig);
-%         modRx = rxSig;
-        modRx = rxfilter(rxSig);
+        modRx = rxSig;
         demodRx = demodulator(modRx);
         if isLDPC
-            [data_out, actual_iter, fpc] = ldpcDecode(demodRx, cfgLDPCDec, maxnumiter);
+            data_out = ldpcDecode(demodRx, cfgLDPCDec, maxnumiter);
         else
             data_out = demodRx;
         end
