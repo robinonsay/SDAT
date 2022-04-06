@@ -10,7 +10,7 @@
     "FEC": {
         "Method": "None"
     },
-    "Channel": "awgn",
+    "Channel": "rayleigh",
     "Ant_Gain": 14.3,
     "Tx_Power": 33,
     "Receiver_Sensitivity": -117,

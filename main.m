@@ -11,8 +11,10 @@ config_json = char(fread(fid, inf)');
 fclose(fid);
 config = jsondecode(config_json);
 %% Setup
-rng(SEED);  % Set random number generator seed
-R = config.Target_Dist;  % Distance from transmitter to reciever
+% Set random number generator seed
+rng(SEED);
+% Distance from transmitter to reciever
+R = config.Target_Dist;  % Transmission Distance
 lambda = physconst('LightSpeed')/config.Freq;  % Wavelength
 Lfs = fspl(R, lambda);  % Free-space path loss
 % Calculate Link Margin and Link Budget
@@ -26,7 +28,15 @@ maxLfs = config.Tx_Power + 2*config.Ant_Gain - config.Min_Link_Margin ...
 maxR = (lambda/(4*pi))*10^(maxLfs/20);
 fprintf("Comm. Range: %.2e m\n", maxR);
 fprintf("Min. Number of Nodes: %d\n", MAX_DIST_TO_MARS/maxR);
+% Link budget at maximum distance
 minLB = config.Tx_Power + config.Ant_Gain * 2 - maxLfs;
+if contains(config.Channel, "awgn", "IgnoreCase", true)
+    channel = comm.AWGNChannel;
+elseif contains(config.Channel, "rayleigh", "IgnoreCase", true)
+    channel = comm.RayleighChannel;
+elseif contains(config.Channel, "rician", "IgnoreCase", true)
+    channel = comm.RicianChannel;
+end
 if contains(config.Mod_Scheme, "QPSK", 'IgnoreCase', true)
     M = 4;  % Modulation Alphabet
     k = log2(M);  % Bits per symbol
@@ -36,15 +46,23 @@ if contains(config.Mod_Scheme, "QPSK", 'IgnoreCase', true)
     demodulator = comm.QPSKDemodulator('BitOutput', true);
     isQPSK = true;
     % Initialize Channel Model
-    channel = comm.AWGNChannel("BitsPerSymbol", k);
+    if contains(config.Channel, "awgn", "IgnoreCase", true)
+        channel.BitsPerSymbol = k;
+    end
 else
     error("Invalid Modulation Scheme");
 end
 spectral_eff = mpsk_efficiency(config.Target_Data_Rate, M);
 fprintf("Spectral Efficiency: %.2e bits/Hz\n", spectral_eff);
+txfilter = comm.RaisedCosineTransmitFilter;
+rxfilter = comm.RaisedCosineReceiveFilter;
 % Define BER and EVM Calculators
-ber = comm.ErrorRate("ResetInputPort", true);
-ser = comm.ErrorRate("ResetInputPort", true);
+ber = comm.ErrorRate("ReceiveDelay", k * txfilter.FilterSpanInSymbols, ...
+    "ResetInputPort", true);
+ser = comm.ErrorRate("ReceiveDelay", k * txfilter.FilterSpanInSymbols, ...
+    "ResetInputPort", true);
+% ber = comm.ErrorRate("ResetInputPort", true);
+% ser = comm.ErrorRate("ResetInputPort", true);
 %-------------------------
 % https://www.dsprelated.com/showarticle/168.php?msclkid=dd85b998a7bb11ec8b9235e20eafce8c
 Rs = config.Target_Data_Rate/k;
@@ -86,7 +104,9 @@ end
 %% Simulation
 [berTheory, serTheory] = berawgn(EbNo, 'psk', M, 'nondiff');  % Theoretical BER from Eb/No
 for i = 1:length(SNR)
-    channel.EbNo = EbNo(i);
+    if contains(config.Channel, "awgn", "IgnoreCase", true)
+        channel.EbNo = EbNo(i);
+    end
     snr = SNR(i);  % SNR
     evm = comm.EVM;
     if isLDPC
@@ -103,9 +123,11 @@ for i = 1:length(SNR)
             encodedData = data_in;
         end
         modTx = modulator(encodedData);
-        txSig = modTx;
+        txSig = txfilter(modTx);
+%         txSig = modTx;
         rxSig = channel(txSig);
-        modRx = rxSig;
+%         modRx = rxSig;
+        modRx = rxfilter(rxSig);
         demodRx = demodulator(modRx);
         if isLDPC
             data_out = ldpcDecode(demodRx, cfgLDPCDec, maxnumiter);
