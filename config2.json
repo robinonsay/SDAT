@@ -11,6 +11,7 @@
         "Method": "LDPC",
         "Code_Rate": "1/4"
     },
+    "Channel": "awgn",
     "Ant_Gain": 49,
     "Tx_Power": 33,
     "Receiver_Sensitivity": -117,

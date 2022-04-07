@@ -54,13 +54,14 @@ else
 end
 spectral_eff = mpsk_efficiency(config.Target_Data_Rate, M);
 fprintf("Spectral Efficiency: %.2e bits/Hz\n", spectral_eff);
+% Define RRC Pulse Shaping Matched Filters
 txfilter = comm.RaisedCosineTransmitFilter;
 rxfilter = comm.RaisedCosineReceiveFilter;
+fvtool(txfilter, 'Analysis', 'impulse');
+filterDelay = k * txfilter.FilterSpanInSymbols;
 % Define BER and EVM Calculators
-ber = comm.ErrorRate("ReceiveDelay", k * txfilter.FilterSpanInSymbols, ...
-    "ResetInputPort", true);
-ser = comm.ErrorRate("ReceiveDelay", k * txfilter.FilterSpanInSymbols, ...
-    "ResetInputPort", true);
+ber = comm.ErrorRate("ResetInputPort", true);
+ser = comm.ErrorRate("ResetInputPort", true);
 % ber = comm.ErrorRate("ResetInputPort", true);
 % ser = comm.ErrorRate("ResetInputPort", true);
 %-------------------------
@@ -95,6 +96,7 @@ if contains(config.FEC.Method, "LDPC", "IgnoreCase", true)
     cfgLDPCDec = ldpcDecoderConfig(cfgLDPCEnc);
     bits_per_frame = cfgLDPCEnc.NumInformationBits;
     num_frames = (10/config.Max_BER) / bits_per_frame + 1;
+    demodulator.DecisionMethod = 'Approximate log-likelihood ratio';
     isLDPC = true;
 else
     % Default to 1 KB frames
@@ -110,9 +112,7 @@ for i = 1:length(SNR)
     snr = SNR(i);  % SNR
     evm = comm.EVM;
     if isLDPC
-        demodulator = comm.QPSKDemodulator('BitOutput',true, ...
-            'DecisionMethod','Approximate log-likelihood ratio', ...
-            'Variance', 1/10^(snr/10));
+        demodulator.Variance = 1/10^(snr/10);
     end
     for counter = 1:num_frames
         if isLDPC
@@ -122,13 +122,15 @@ for i = 1:length(SNR)
             data_in = randi([0 1], bits_per_frame, 1);
             encodedData = data_in;
         end
-        modTx = modulator(encodedData);
+        paddedEncodedData = [encodedData; zeros(filterDelay,1)];
+        modTx = modulator(paddedEncodedData);
         txSig = txfilter(modTx);
 %         txSig = modTx;
         rxSig = channel(txSig);
 %         modRx = rxSig;
         modRx = rxfilter(rxSig);
         demodRx = demodulator(modRx);
+        demodRx(1:filterDelay) = [];
         if isLDPC
             data_out = ldpcDecode(demodRx, cfgLDPCDec, maxnumiter);
         else
