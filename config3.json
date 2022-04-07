@@ -10,6 +10,11 @@
         "Method": "M-PSK",
         "M": 4
     },
+    "RRC_Filter_Props":{
+        "RollOff": 0.35,
+        "FilterSpanInSymbols": 10,
+        "SamplesPerSymbol": 10
+    },
     "FEC": {
         "Method": "None"
     },

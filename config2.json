@@ -1,6 +1,6 @@
 {
     "G_T": 0,
-    "Max_BER": 1e-4,
+    "Max_BER": 1e-5,
     "Max_ SER": 1e-3,
     "Min_Data_Rate": 1.6e6,
     "Target_Data_Rate": 20e6,
@@ -9,6 +9,11 @@
     "Mod_Scheme": {
         "Method": "M-PSK",
         "M": 4
+    },
+    "RRC_Filter_Props":{
+        "RollOff": 0.35,
+        "FilterSpanInSymbols": 10,
+        "SamplesPerSymbol": 10
     },
     "FEC": {
         "Method": "LDPC",
