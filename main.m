@@ -166,7 +166,7 @@ end
 %% Plot Figures
 % Plot BER
 berVec(berVec==0) = 1e-100;
-figure;
+berFigure = figure;
 semilogy(EbNo,berVec(:,1));
 hold on;
 semilogy(EbNo,berTheory);
@@ -179,8 +179,9 @@ xlabel('Eb/No (dB)');
 ylabel('Bit Error Rate');
 grid on;
 hold off;
+saveas(berFigure, "Figures/berFigure.png");
 % Plot EVM
-figure;
+evmFigure = figure;
 semilogy(EbNo,evmVec(:, 1));
 hold on;
 title('RMS EVM vs Eb/No');
@@ -188,14 +189,16 @@ xlabel('Eb/No (dB)');
 ylabel('RMS EVM');
 grid on;
 hold off;
+saveas(evmFigure, "Figures/evmFigure.png");
 % Plot Link Margin
 d = (maxR-1e6:maxR+1e6);
 Lfs = fspl(d, lambda);
 LB = config.Tx_Power + config.Ant_Gain * 2 - Lfs;
 LM = LB - config.Receiver_Sensitivity;
-figure;
+LMFigure = figure;
 plot(d,LM);
 title('Link Margin vs Distance');
 xline(maxR, '-', 'Maximum Distance');
 yline(config.Min_Link_Margin, '-', 'Minimum Link Margin');
 ylabel('Link Margin (dB)'); xlabel('Distance (m)');
+saveas(LMFigure, "Figures/LMFigure.png");
