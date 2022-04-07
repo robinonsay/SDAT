@@ -6,7 +6,10 @@
     "Target_Data_Rate": 20e6,
     "Target_Dist": 1e6,
     "Min_Link_Margin": 3,
-    "Mod_Scheme": "QPSK",
+    "Mod_Scheme": {
+        "Method": "M-PSK",
+        "M": 4
+    },
     "FEC": {
         "Method": "LDPC",
         "Code_Rate": "1/4"

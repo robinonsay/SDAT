@@ -24,12 +24,14 @@ LM = LB - config.Receiver_Sensitivity;  % Link Margin Calc
 fprintf("Link Margin (%.2e m): %.2e dB\n", R, LM);
 % Recalculate LB/LM for max distance
 maxLfs = config.Tx_Power + 2*config.Ant_Gain - config.Min_Link_Margin ...
-    - config.Receiver_Sensitivity;
-maxR = (lambda/(4*pi))*10^(maxLfs/20);
+    - config.Receiver_Sensitivity;  % The max allowable Lfs
+% Assuming an omnidirectional radiation pattern...
+maxR = (lambda/(4*pi))*10^(maxLfs/20);  % Max distance given maxLfs
 fprintf("Comm. Range: %.2e m\n", maxR);
 fprintf("Min. Number of Nodes: %d\n", MAX_DIST_TO_MARS/maxR);
 % Link budget at maximum distance
 minLB = config.Tx_Power + config.Ant_Gain * 2 - maxLfs;
+% Specify channel model
 if contains(config.Channel, "awgn", "IgnoreCase", true)
     channel = comm.AWGNChannel;
 elseif contains(config.Channel, "rayleigh", "IgnoreCase", true)
@@ -37,14 +39,16 @@ elseif contains(config.Channel, "rayleigh", "IgnoreCase", true)
 elseif contains(config.Channel, "rician", "IgnoreCase", true)
     channel = comm.RicianChannel;
 end
-if contains(config.Mod_Scheme, "QPSK", 'IgnoreCase', true)
-    M = 4;  % Modulation Alphabet
+% Specify modulation scheme
+fprintf("Modulation Scheme:\n");
+disp(config.Mod_Scheme);
+if contains(config.Mod_Scheme.Method, "M-PSK", 'IgnoreCase', true)
+    M = config.Mod_Scheme.M;  % Modulation Alphabet
     k = log2(M);  % Bits per symbol
-    % Define QPSK modulator
-    modulator = comm.QPSKModulator('BitInput',true);
-    % Define QPSK demodulator
-    demodulator = comm.QPSKDemodulator('BitOutput', true);
-    isQPSK = true;
+    % Define PSK modulator
+    modulator = comm.PSKModulator('ModulationOrder', M, 'BitInput',true);
+    % Define PSK demodulator
+    demodulator = comm.PSKDemodulator('ModulationOrder', M, 'BitOutput', true);
     % Initialize Channel Model
     if contains(config.Channel, "awgn", "IgnoreCase", true)
         channel.BitsPerSymbol = k;
@@ -52,6 +56,7 @@ if contains(config.Mod_Scheme, "QPSK", 'IgnoreCase', true)
 else
     error("Invalid Modulation Scheme");
 end
+% Calculate Spectral Efficiency
 spectral_eff = mpsk_efficiency(config.Target_Data_Rate, M);
 fprintf("Spectral Efficiency: %.2e bits/Hz\n", spectral_eff);
 % Define RRC Pulse Shaping Matched Filters
@@ -61,10 +66,7 @@ fvtool(txfilter, 'Analysis', 'impulse');
 filterDelay = k * txfilter.FilterSpanInSymbols;
 % Define BER and EVM Calculators
 ber = comm.ErrorRate("ResetInputPort", true);
-ser = comm.ErrorRate("ResetInputPort", true);
-% ber = comm.ErrorRate("ResetInputPort", true);
-% ser = comm.ErrorRate("ResetInputPort", true);
-%-------------------------
+%Calculate Eb/No and SNR-------------------------
 % https://www.dsprelated.com/showarticle/168.php?msclkid=dd85b998a7bb11ec8b9235e20eafce8c
 Rs = config.Target_Data_Rate/k;
 Rb = config.Target_Data_Rate;
@@ -77,19 +79,19 @@ Eb = Es - 10*log10(k);
 EbNo = Eb - No;
 minEbNo = config.Receiver_Sensitivity + config.Min_Link_Margin ...
     - 10*log10(Rs) - 10*log10(k) - No(end);
-%-------------------------
+%-------------------------------------------------
 % Initialize output vectors
 berVec = zeros(length(Pn),3);
-serVec = zeros(length(Pn),3);
 evmVec = zeros(length(Pn), 1);
 errStats = zeros(1,3);
-isLDPC = false;
+% Setup FEC
 fprintf("FEC:\n");
 disp(config.FEC);
 if contains(config.FEC.Method, "LDPC", "IgnoreCase", true)
     % Valid Code Rates: 1/4, 1/3, 2/5, 1/2, 3/5,
     % 2/3, 3/4, 4/5, 5/6, 8/9, or 9/10
     codeRate = eval(config.FEC.Code_Rate);
+    % Use DVBS2 Standard for simplicity
     H = dvbs2ldpc(codeRate);
     maxnumiter = 50;
     cfgLDPCEnc = ldpcEncoderConfig(H);
@@ -97,54 +99,64 @@ if contains(config.FEC.Method, "LDPC", "IgnoreCase", true)
     bits_per_frame = cfgLDPCEnc.NumInformationBits;
     num_frames = (10/config.Max_BER) / bits_per_frame + 1;
     demodulator.DecisionMethod = 'Approximate log-likelihood ratio';
-    isLDPC = true;
 else
     % Default to 1 KB frames
     bits_per_frame = 2^10;
     num_frames = (10/config.Max_BER) / bits_per_frame + 1;
 end
 %% Simulation
-[berTheory, serTheory] = berawgn(EbNo, 'psk', M, 'nondiff');  % Theoretical BER from Eb/No
+% Theoretical BER from Eb/No
+[berTheory, serTheory] = berawgn(EbNo, 'psk', M, 'nondiff');
 for i = 1:length(SNR)
     if contains(config.Channel, "awgn", "IgnoreCase", true)
+        % Set EbNo for AWGN channel
         channel.EbNo = EbNo(i);
     end
-    snr = SNR(i);  % SNR
+    snr = SNR(i);
+    % Define EVM Calculator
     evm = comm.EVM;
-    if isLDPC
+    if contains(config.FEC.Method, "LDPC", "IgnoreCase", true)
+        % Set demodulator variance for Approx. LLR demodulation
         demodulator.Variance = 1/10^(snr/10);
     end
+    % Send Frames
     for counter = 1:num_frames
-        if isLDPC
+        if contains(config.FEC.Method, "LDPC", "IgnoreCase", true)
+            % Encode Data
             data_in = randi([0 1], bits_per_frame, 1, "int8");
             encodedData = ldpcEncode(data_in, cfgLDPCEnc);
         else
             data_in = randi([0 1], bits_per_frame, 1);
             encodedData = data_in;
         end
+        % Pad data with zeros because of filter delay
         paddedEncodedData = [encodedData; zeros(filterDelay,1)];
+        % Modulate signal
         modTx = modulator(paddedEncodedData);
+        % RRC Filter signal
         txSig = txfilter(modTx);
-%         txSig = modTx;
+        % Send signal over channel
         rxSig = channel(txSig);
-%         modRx = rxSig;
+        % Matched RRC filter to get symbols
         modRx = rxfilter(rxSig);
+        % Demodulate signal
         demodRx = demodulator(modRx);
+        % Remove padded data
         demodRx(1:filterDelay) = [];
-        if isLDPC
+        if contains(config.FEC.Method, "LDPC", "IgnoreCase", true)
+            % Decode Data
             data_out = ldpcDecode(demodRx, cfgLDPCDec, maxnumiter);
         else
             data_out = demodRx;
         end
+        % Calculate stats
         errStats = ber(data_in, data_out, false);
-        serStats = ser(modTx, modRx, false);
         evmStats = evm(modTx, modRx);
     end
+    % Save stats and reset calculators
     berVec(i, :) = errStats;
-    serVec(i, :) = serStats;
     evmVec(i, :) = evmStats;
     errStats = ber(data_in, data_out, true);
-    serStats = ser(modTx, modRx, true);
 end
 %% Plot Figures
 % Plot BER
@@ -160,19 +172,6 @@ title('BER vs Eb/No');
 legend('Simulation','Theory','Location','Best');
 xlabel('Eb/No (dB)');
 ylabel('Bit Error Rate');
-grid on;
-hold off;
-% Plot SER
-figure;
-semilogy(EbNo,serVec(:,1));
-hold on;
-semilogy(EbNo, serTheory);
-title('SER vs Eb/No');
-legend('Simulation','Theory','Location','Best');
-xlabel('Eb/No (dB)');
-ylabel('Symbol Error Rate');
-ylim([1e-10, 1]);
-yline(config.Max_SER, '-', 'Maximum SER');
 grid on;
 hold off;
 % Plot EVM
