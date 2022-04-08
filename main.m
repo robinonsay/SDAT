@@ -10,9 +10,9 @@ fid = fopen(config_name);
 config_json = char(fread(fid, inf)');
 fclose(fid);
 config = jsondecode(config_json);
-%% Setup
 % Set random number generator seed
 rng(SEED);
+%% Link Margin & Link Budget
 % Distance from transmitter to reciever
 R = config.Target_Dist;  % Transmission Distance
 lambda = physconst('LightSpeed')/config.Freq;  % Wavelength
@@ -31,6 +31,7 @@ fprintf("Comm. Range: %.2e m\n", maxR);
 fprintf("Min. Number of Nodes: %d\n", MAX_DIST_TO_MARS/maxR);
 % Link budget at maximum distance
 minLB = config.Tx_Power + config.Ant_Gain * 2 - maxLfs;
+%% Channel Setup
 % Specify channel model
 if contains(config.Channel, "awgn", "IgnoreCase", true)
     channel = comm.AWGNChannel;
@@ -39,6 +40,7 @@ elseif contains(config.Channel, "rayleigh", "IgnoreCase", true)
 elseif contains(config.Channel, "rician", "IgnoreCase", true)
     channel = comm.RicianChannel;
 end
+%% Modulation Setup
 % Specify modulation scheme
 fprintf("Modulation Scheme:\n");
 disp(config.Mod_Scheme);
@@ -59,6 +61,7 @@ end
 % Calculate Spectral Efficiency
 spectral_eff = mpsk_efficiency(config.Target_Data_Rate, M);
 fprintf("Spectral Efficiency: %.2e bits/Hz\n", spectral_eff);
+%% Pulse Shaping Filter Setup
 % Define RRC Pulse Shaping Matched Filters
 txfilter = comm.RaisedCosineTransmitFilter("RolloffFactor", config.RRC_Filter_Props.RollOff, ...
     "FilterSpanInSymbols", config.RRC_Filter_Props.FilterSpanInSymbols, ...
@@ -71,6 +74,7 @@ fvtool(txfilter, 'Analysis', 'impulse');
 filterDelay = k * txfilter.FilterSpanInSymbols;
 % Define BER and EVM Calculators
 ber = comm.ErrorRate("ResetInputPort", true);
+%% Eb/No and SNR
 %Calculate Eb/No and SNR-------------------------
 % https://www.dsprelated.com/showarticle/168.php?msclkid=dd85b998a7bb11ec8b9235e20eafce8c
 Rs = config.Target_Data_Rate/k;
@@ -89,7 +93,7 @@ minEbNo = config.Receiver_Sensitivity + config.Min_Link_Margin ...
 berVec = zeros(length(Pn),3);
 evmVec = zeros(length(Pn), 1);
 errStats = zeros(1,3);
-% Setup FEC
+%% Setup FEC
 fprintf("FEC:\n");
 disp(config.FEC);
 if contains(config.FEC.Method, "LDPC", "IgnoreCase", true)
