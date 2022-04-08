@@ -174,7 +174,7 @@ xline(minEbNo, '-', 'Minimum Eb/No');
 yline(config.Max_BER, '-', 'Maximum BER');
 ylim([1e-10, 1]);
 title('BER vs Eb/No');
-legend('Simulation','Theory','Location','Best');
+legend('Simulation','AWGN Theory','Location','Best');
 xlabel('Eb/No (dB)');
 ylabel('Bit Error Rate');
 grid on;

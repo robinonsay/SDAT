@@ -1,6 +1,6 @@
 {
     "G_T": 0,
-    "Max_BER": 1e-4,
+    "Max_BER": 1e-5,
     "Max_ SER": 1e-3,
     "Min_Data_Rate": 1.6e6,
     "Target_Data_Rate": 20e6,
@@ -16,7 +16,8 @@
         "SamplesPerSymbol": 10
     },
     "FEC": {
-        "Method": "None"
+        "Method": "LDPC",
+        "Code_Rate": "1/4"
     },
     "Channel": "rayleigh",
     "Ant_Gain": 14.3,
