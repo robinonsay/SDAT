@@ -22,7 +22,7 @@
     "Channel": "AWGN",
     "Tx_Ant_Gain": 75.82,
     "Rx_Ant_Gain": 49,
-    "Tx_Power": 33,
+    "Tx_Power": 73,
     "Receiver_Sensitivity": -117,
     "Bandwidth": 50e6,
     "Freq": 8.4e9

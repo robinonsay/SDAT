@@ -1,7 +1,7 @@
 %% Constants
 SEED = 3165;
 MAX_DIST_TO_MARS = 400.4e9;
-%% Import Config File
+%% Import Config Filasde
 config_name = input("Config File Name? ", "s");
 if isempty(config_name)
     config_name = "default_config.json";
@@ -196,7 +196,7 @@ grid on;
 hold off;
 saveas(evmFigure, "Figures/evmFigure.png");
 % Plot Link Margin
-d = (maxR-1e6:maxR+1e6);
+d = (maxR-maxR/2:maxR/100:maxR+maxR/2);
 Lfs = fspl(d, lambda);
 LB = config.Tx_Power + config.Tx_Ant_Gain + config.Rx_Ant_Gain - Lfs;
 LM = LB - config.Receiver_Sensitivity;

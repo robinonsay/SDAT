@@ -20,8 +20,8 @@
         "Code_Rate": "1/4"
     },
     "Channel": "AWGN",
-    "Tx_Ant_Gain": 75.82,
-    "Rx_Ant_Gain": 14.3,
+    "Tx_Ant_Gain": 14.3,
+    "Rx_Ant_Gain": 75.82,
     "Tx_Power": 33,
     "Receiver_Sensitivity": -117,
     "Bandwidth": 50e6,
