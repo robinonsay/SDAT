@@ -18,19 +18,20 @@ R = config.Target_Dist;  % Transmission Distance
 lambda = physconst('LightSpeed')/config.Freq;  % Wavelength
 Lfs = fspl(R, lambda);  % Free-space path loss
 % Calculate Link Margin and Link Budget
-LB = config.Tx_Power + config.Ant_Gain * 2 - Lfs;  % Link Budget Calc
+LB = config.Tx_Power + config.Tx_Ant_Gain + ...
+    config.Rx_Ant_Gain - Lfs;  % Link Budget Calc
 fprintf("Link Budget (%.2e m): %.2e dB\n", R, LB);
 LM = LB - config.Receiver_Sensitivity;  % Link Margin Calc
 fprintf("Link Margin (%.2e m): %.2e dB\n", R, LM);
 % Recalculate LB/LM for max distance
-maxLfs = config.Tx_Power + 2*config.Ant_Gain - config.Min_Link_Margin ...
-    - config.Receiver_Sensitivity;  % The max allowable Lfs
+maxLfs = config.Tx_Power + config.Tx_Ant_Gain + config.Rx_Ant_Gain - ...
+    config.Min_Link_Margin - config.Receiver_Sensitivity;  % The max allowable Lfs
 % Assuming an omnidirectional radiation pattern...
 maxR = (lambda/(4*pi))*10^(maxLfs/20);  % Max distance given maxLfs
 fprintf("Comm. Range: %.2e m\n", maxR);
 fprintf("Min. Number of Nodes: %d\n", MAX_DIST_TO_MARS/maxR);
 % Link budget at maximum distance
-minLB = config.Tx_Power + config.Ant_Gain * 2 - maxLfs;
+minLB = config.Tx_Power + config.Tx_Ant_Gain + config.Rx_Ant_Gain - maxLfs;
 %% Channel Setup
 % Specify channel model
 if contains(config.Channel, "awgn", "IgnoreCase", true)
@@ -197,7 +198,7 @@ saveas(evmFigure, "Figures/evmFigure.png");
 % Plot Link Margin
 d = (maxR-1e6:maxR+1e6);
 Lfs = fspl(d, lambda);
-LB = config.Tx_Power + config.Ant_Gain * 2 - Lfs;
+LB = config.Tx_Power + config.Tx_Ant_Gain + config.Rx_Ant_Gain - Lfs;
 LM = LB - config.Receiver_Sensitivity;
 LMFigure = figure;
 plot(d,LM);
