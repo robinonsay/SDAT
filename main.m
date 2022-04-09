@@ -36,8 +36,6 @@ minLB = config.Tx_Power + config.Tx_Ant_Gain + config.Rx_Ant_Gain - maxLfs;
 % Specify channel model
 if contains(config.Channel, "awgn", "IgnoreCase", true)
     channel = comm.AWGNChannel;
-elseif contains(config.Channel, "rayleigh", "IgnoreCase", true)
-    channel = comm.RayleighChannel;
 elseif contains(config.Channel, "rician", "IgnoreCase", true)
     channel = comm.RicianChannel;
 end
@@ -71,7 +69,6 @@ rxfilter = comm.RaisedCosineReceiveFilter("RolloffFactor", config.RRC_Filter_Pro
     "FilterSpanInSymbols", config.RRC_Filter_Props.FilterSpanInSymbols, ...
     "InputSamplesPerSymbol", config.RRC_Filter_Props.SamplesPerSymbol, ...
     "DecimationFactor", config.RRC_Filter_Props.SamplesPerSymbol);
-fvtool(txfilter, 'Analysis', 'impulse');
 filterDelay = k * txfilter.FilterSpanInSymbols;
 % Define BER and EVM Calculators
 ber = comm.ErrorRate("ResetInputPort", true);
@@ -92,7 +89,6 @@ minEbNo = config.Receiver_Sensitivity + config.Min_Link_Margin ...
 %-------------------------------------------------
 % Initialize output vectors
 berVec = zeros(length(Pn),3);
-evmVec = zeros(length(Pn), 1);
 errStats = zeros(1,3);
 %% Setup FEC
 fprintf("FEC:\n");
@@ -123,8 +119,6 @@ for i = 1:length(SNR)
         channel.EbNo = EbNo(i);
     end
     snr = SNR(i);
-    % Define EVM Calculator
-    evm = comm.EVM;
     if contains(config.FEC.Method, "LDPC", "IgnoreCase", true)
         % Set demodulator variance for Approx. LLR demodulation
         demodulator.Variance = 1/10^(snr/10);
@@ -161,11 +155,9 @@ for i = 1:length(SNR)
         end
         % Calculate stats
         errStats = ber(data_in, data_out, false);
-        evmStats = evm(modTx, modRx);
     end
     % Save stats and reset calculators
     berVec(i, :) = errStats;
-    evmVec(i, :) = evmStats;
     errStats = ber(data_in, data_out, true);
 end
 %% Plot Figures
@@ -185,16 +177,6 @@ ylabel('Bit Error Rate');
 grid on;
 hold off;
 saveas(berFigure, "Figures/berFigure.png");
-% Plot EVM
-evmFigure = figure;
-semilogy(EbNo,evmVec(:, 1));
-hold on;
-title('RMS EVM vs Eb/No');
-xlabel('Eb/No (dB)');
-ylabel('RMS EVM');
-grid on;
-hold off;
-saveas(evmFigure, "Figures/evmFigure.png");
 % Plot Link Margin
 d = (maxR-maxR/2:maxR/100:maxR+maxR/2);
 Lfs = fspl(d, lambda);
