@@ -34,9 +34,9 @@ fprintf("Min. Number of Nodes: %d\n", MAX_DIST_TO_MARS/maxR);
 minLB = config.Tx_Power + config.Tx_Ant_Gain + config.Rx_Ant_Gain - maxLfs;
 %% Channel Setup
 % Specify channel model
-if contains(config.Channel, "awgn", "IgnoreCase", true)
+if contains(config.Channel.Model, "awgn", "IgnoreCase", true)
     channel = comm.AWGNChannel;
-elseif contains(config.Channel, "rician", "IgnoreCase", true)
+elseif contains(config.Channel.Model, "rician", "IgnoreCase", true)
     channel = comm.RicianChannel;
 end
 %% Modulation Setup
@@ -51,7 +51,7 @@ if contains(config.Mod_Scheme.Method, "M-PSK", 'IgnoreCase', true)
     % Define PSK demodulator
     demodulator = comm.PSKDemodulator('ModulationOrder', M, 'BitOutput', true);
     % Initialize Channel Model
-    if contains(config.Channel, "awgn", "IgnoreCase", true)
+    if contains(config.Channel.Model, "awgn", "IgnoreCase", true)
         channel.BitsPerSymbol = k;
     end
 else
@@ -111,18 +111,55 @@ else
     num_frames = (10/config.Max_BER) / bits_per_frame + 1;
 end
 %% Simulation
-% Theoretical BER from Eb/No
-[berTheory, serTheory] = berawgn(EbNo, 'psk', M, 'nondiff');
-for i = 1:length(SNR)
-    if contains(config.Channel, "awgn", "IgnoreCase", true)
+if contains(config.Channel.Model, "awgn", "IgnoreCase", true)
+    % Theoretical BER from Eb/No
+    [berTheory, serTheory] = berawgn(EbNo, 'psk', M, 'nondiff');
+    for i = 1:length(SNR)
         % Set EbNo for AWGN channel
         channel.EbNo = EbNo(i);
+        snr = SNR(i);
+        if contains(config.FEC.Method, "LDPC", "IgnoreCase", true)
+            % Set demodulator variance for Approx. LLR demodulation
+            demodulator.Variance = 1/10^(snr/10);
+        end
+        % Send Frames
+        for counter = 1:num_frames
+            if contains(config.FEC.Method, "LDPC", "IgnoreCase", true)
+                % Encode Data
+                data_in = randi([0 1], bits_per_frame, 1, "int8");
+                encodedData = ldpcEncode(data_in, cfgLDPCEnc);
+            else
+                data_in = randi([0 1], bits_per_frame, 1);
+                encodedData = data_in;
+            end
+            % Pad data with zeros because of filter delay
+            paddedEncodedData = [encodedData; zeros(filterDelay,1)];
+            % Modulate signal
+            modTx = modulator(paddedEncodedData);
+            % RRC Filter signal
+            txSig = txfilter(modTx);
+            % Send signal over channel
+            rxSig = channel(txSig);
+            % Matched RRC filter to get symbols
+            modRx = rxfilter(rxSig);
+            % Demodulate signal
+            demodRx = demodulator(modRx);
+            % Remove padded data
+            demodRx(1:filterDelay) = [];
+            if contains(config.FEC.Method, "LDPC", "IgnoreCase", true)
+                % Decode Data
+                data_out = ldpcDecode(demodRx, cfgLDPCDec, maxnumiter);
+            else
+                data_out = demodRx;
+            end
+            % Calculate stats
+            errStats = ber(data_in, data_out, false);
+        end
+        % Save stats and reset calculators
+        berVec(i, :) = errStats;
+        errStats = ber(data_in, data_out, true);  % Reset Calculator
     end
-    snr = SNR(i);
-    if contains(config.FEC.Method, "LDPC", "IgnoreCase", true)
-        % Set demodulator variance for Approx. LLR demodulation
-        demodulator.Variance = 1/10^(snr/10);
-    end
+elseif contains(config.Channel.Model, "rician", "IgnoreCase", true)
     % Send Frames
     for counter = 1:num_frames
         if contains(config.FEC.Method, "LDPC", "IgnoreCase", true)
@@ -156,27 +193,27 @@ for i = 1:length(SNR)
         % Calculate stats
         errStats = ber(data_in, data_out, false);
     end
-    % Save stats and reset calculators
-    berVec(i, :) = errStats;
-    errStats = ber(data_in, data_out, true);
+    fprintf("BER for Rician Channel: %d\n", errStats(1));
 end
 %% Plot Figures
 % Plot BER
-berVec(berVec==0) = 1e-100;
-berFigure = figure;
-semilogy(EbNo,berVec(:,1));
-hold on;
-semilogy(EbNo,berTheory);
-xline(minEbNo, '-', 'Minimum Eb/No');
-yline(config.Max_BER, '-', 'Maximum BER');
-ylim([1e-10, 1]);
-title('BER vs Eb/No');
-legend('Simulation','AWGN Theory','Location','Best');
-xlabel('Eb/No (dB)');
-ylabel('Bit Error Rate');
-grid on;
-hold off;
-saveas(berFigure, "Figures/berFigure.png");
+if contains(config.Channel.Model, "awgn", "IgnoreCase", true)
+    berVec(berVec==0) = 1e-100;
+    berFigure = figure;
+    semilogy(EbNo,berVec(:,1));
+    hold on;
+    semilogy(EbNo,berTheory);
+    xline(minEbNo, '-', 'Minimum Eb/No');
+    yline(config.Max_BER, '-', 'Maximum BER');
+    ylim([1e-10, 1]);
+    title('BER vs Eb/No');
+    legend('Simulation','AWGN Theory','Location','Best');
+    xlabel('Eb/No (dB)');
+    ylabel('Bit Error Rate');
+    grid on;
+    hold off;
+    saveas(berFigure, "Figures/berFigure.png");
+end
 % Plot Link Margin
 d = (maxR-maxR/2:maxR/100:maxR+maxR/2);
 Lfs = fspl(d, lambda);

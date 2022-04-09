@@ -19,7 +19,15 @@
         "Method": "LDPC",
         "Code_Rate": "1/4"
     },
-    "Channel": "rician",
+    "Channel": {
+        "Model": "Rician",
+        "Path_Delays": "[0:10]",
+        "Average_Path_Gains": "0",
+        "K_Factor": "3",
+        "Direct_Path_Doppler_Shift": "0",
+        "Direct_Path_Initial_Phase": "0",
+        "Maximum_Doppler_Shift": 0.001
+    },
     "Tx_Ant_Gain": 14.3,
     "Rx_Ant_Gain": 14.3,
     "Tx_Power": 33,

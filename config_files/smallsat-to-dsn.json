@@ -19,7 +19,9 @@
         "Method": "LDPC",
         "Code_Rate": "1/4"
     },
-    "Channel": "AWGN",
+    "Channel": {
+        "Model": "AWGN"
+    },
     "Tx_Ant_Gain": 49,
     "Rx_Ant_Gain": 75.82,
     "Tx_Power": 33,
