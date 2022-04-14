@@ -3,6 +3,7 @@ SEED = 3165;
 MAX_DIST_TO_MARS = 400.4e9;
 %% Import Config Filasde
 config_name = input("Config File Name? ", "s");
+run_description = input("Run Description? ", "s");
 if isempty(config_name)
     config_name = "default_config.json";
 end
@@ -37,7 +38,18 @@ minLB = config.Tx_Power + config.Tx_Ant_Gain + config.Rx_Ant_Gain - maxLfs;
 if contains(config.Channel.Model, "awgn", "IgnoreCase", true)
     channel = comm.AWGNChannel;
 elseif contains(config.Channel.Model, "rician", "IgnoreCase", true)
-    channel = comm.RicianChannel;
+    pathDelays = eval(config.Channel.Path_Delays);
+    averagePathGains = eval(config.Channel.Average_Path_Gains);
+    kFactor = eval(config.Channel.K_Factor);
+    directPathDopplerShift = eval(config.Channel.Direct_Path_Doppler_Shift);
+    directPathInitialPhase = eval(config.Channel.Direct_Path_Initial_Phase);
+    maxDopplerShift = config.Channel.Maximum_Doppler_Shift;
+    channel = comm.RicianChannel("PathDelays", pathDelays, ...
+        "AveragePathGains", averagePathGains, ...
+        "KFactor", kFactor, ...
+        "DirectPathDopplerShift", directPathDopplerShift, ...
+        "DirectPathInitialPhase", directPathInitialPhase, ...
+        "MaximumDopplerShift", maxDopplerShift);
 end
 %% Modulation Setup
 % Specify modulation scheme
@@ -206,8 +218,8 @@ if contains(config.Channel.Model, "awgn", "IgnoreCase", true)
     xline(minEbNo, '-', 'Minimum Eb/No');
     yline(config.Max_BER, '-', 'Maximum BER');
     ylim([1e-10, 1]);
-    title('BER vs Eb/No');
-    legend('Simulation','AWGN Theory','Location','Best');
+    title(['BER vs Eb/No: ', run_description]);
+    legend('Simulation','AWGN Theory (no FEC)','Location','Best');
     xlabel('Eb/No (dB)');
     ylabel('Bit Error Rate');
     grid on;
@@ -221,7 +233,7 @@ LB = config.Tx_Power + config.Tx_Ant_Gain + config.Rx_Ant_Gain - Lfs;
 LM = LB - config.Receiver_Sensitivity;
 LMFigure = figure;
 plot(d,LM);
-title('Link Margin vs Distance');
+title(['Link Margin vs Distance: ', run_description]);
 xline(maxR, '-', 'Maximum Distance');
 yline(config.Min_Link_Margin, '-', 'Minimum Link Margin');
 ylabel('Link Margin (dB)'); xlabel('Distance (m)');

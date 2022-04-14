@@ -17,15 +17,15 @@
     },
     "FEC": {
         "Method": "LDPC",
-        "Code_Rate": "1/4"
+        "Code_Rate": "1/2"
     },
     "Channel": {
         "Model": "Rician",
-        "Path_Delays": "[0:10]",
-        "Average_Path_Gains": "0",
+        "Path_Delays": "[0.0 0.5 1.2]*1e-6",
+        "Average_Path_Gains": "[0.1 0.5 0.2]",
         "K_Factor": "3",
-        "Direct_Path_Doppler_Shift": "0",
-        "Direct_Path_Initial_Phase": "0",
+        "Direct_Path_Doppler_Shift": "5",
+        "Direct_Path_Initial_Phase": "0.5",
         "Maximum_Doppler_Shift": 0.001
     },
     "Tx_Ant_Gain": 14.3,

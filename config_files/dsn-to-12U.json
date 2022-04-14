@@ -17,7 +17,7 @@
     },
     "FEC": {
         "Method": "LDPC",
-        "Code_Rate": "1/4"
+        "Code_Rate": "1/2"
     },
     "Channel": {
         "Model": "AWGN"
