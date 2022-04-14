@@ -69,9 +69,6 @@ if contains(config.Mod_Scheme.Method, "M-PSK", 'IgnoreCase', true)
 else
     error("Invalid Modulation Scheme");
 end
-% Calculate Spectral Efficiency
-spectral_eff = mpsk_efficiency(config.Target_Data_Rate, M);
-fprintf("Spectral Efficiency: %.2e bits/Hz\n", spectral_eff);
 %% Pulse Shaping Filter Setup
 % Define RRC Pulse Shaping Matched Filters
 txfilter = comm.RaisedCosineTransmitFilter("RolloffFactor", config.RRC_Filter_Props.RollOff, ...
@@ -225,6 +222,19 @@ if contains(config.Channel.Model, "awgn", "IgnoreCase", true)
     grid on;
     hold off;
     saveas(berFigure, "Figures/berFigure.png");
+    % Calculate Spectral Efficiency
+    PsDec = 10.^(Ps/10);
+    NoDec = 10.^(No/10);
+    capcity = config.Bandwidth * log2(1 + PsDec/(NoDec*config.Bandwidth));
+    specFigure = figure;
+    plot(No, capcity);
+    hold on;
+    title(['Spectral Efficiency ', run_description]);
+    xlabel('SNR (decimal)');
+    ylabel('Capacity (bits/sec');
+    grid on;
+    hold off;
+    saveas(specFigure, "Figures/specFigure.png");
 end
 % Plot Link Margin
 d = (maxR-maxR/2:maxR/100:maxR+maxR/2);
