@@ -107,7 +107,7 @@ end
 % https://www.dsprelated.com/showarticle/168.php?msclkid=dd85b998a7bb11ec8b9235e20eafce8c
 Rs = config.Target_Data_Rate/k;
 Rb = config.Target_Data_Rate;
-BWn = 2*config.Freq+config.Bandwidth;
+BWn = config.Bandwidth;
 Ps = minLB;
 No = (-231:-171)';
 Es = Ps - 10*log10(Rs);
@@ -206,6 +206,7 @@ end
 %% Plot Figures
 % Plot BER
 if contains(config.Channel.Model, "awgn", "IgnoreCase", true)
+    berVec(berVec == 0) = config.Max_BER^5;
     berFigure = figure;
     semilogy(EbNo,berVec(:,1), "Marker", "*");
     hold on;
@@ -217,7 +218,8 @@ if contains(config.Channel.Model, "awgn", "IgnoreCase", true)
     xlabel('Eb/No (dB)');
     ylabel('Bit Error Rate');
     annotation("textbox", [.2 .5 .6 .3], ...
-        "String", ["Expected EbNo" EbNo(1)], 'FitBoxToText', 'on');
+        "String", ["Expected EbNo" EbNo(1)], ...
+        'FitBoxToText', 'on');
     grid on;
     hold off;
     saveas(berFigure, "Figures/berFigure.png");
