@@ -107,7 +107,7 @@ end
 % https://www.dsprelated.com/showarticle/168.php?msclkid=dd85b998a7bb11ec8b9235e20eafce8c
 Rs = config.Target_Data_Rate/k;
 Rb = config.Target_Data_Rate;
-BWn = Rs;  % BWn = Symbol Rate because it is a matched filter system
+BWn = 2*config.Freq+config.Bandwidth;
 Ps = minLB;
 No = (-231:-171)';
 Es = Ps - 10*log10(Rs);
@@ -207,7 +207,7 @@ end
 % Plot BER
 if contains(config.Channel.Model, "awgn", "IgnoreCase", true)
     berFigure = figure;
-    semilogy(EbNo,berVec(:,1));
+    semilogy(EbNo,berVec(:,1), "Marker", "*");
     hold on;
     semilogy(EbNo,berTheory);
     ylim([config.Max_BER^2 1]);
@@ -216,14 +216,16 @@ if contains(config.Channel.Model, "awgn", "IgnoreCase", true)
     legend('Simulation','AWGN Theory (no FEC)','Location','Best');
     xlabel('Eb/No (dB)');
     ylabel('Bit Error Rate');
+    annotation("textbox", [.2 .5 .6 .3], ...
+        "String", ["Expected EbNo" EbNo(1)], 'FitBoxToText', 'on');
     grid on;
     hold off;
     saveas(berFigure, "Figures/berFigure.png");
     % Calculate Spectral Efficiency
-    snrDec = 10.^(SNR/10);
-    capcity = config.Bandwidth * log2(1 + snrDec);
+    SNR_dec = 10.^(SNR/10);
+    capacity = config.Bandwidth * log2(1 + SNR_dec);
     specFigure = figure;
-    semilogy(SNR, capcity);
+    semilogy(SNR, capacity);
     hold on;
     title(['Spectral Efficiency ', run_description]);
     xlabel('SNR (dB)');
