@@ -87,17 +87,16 @@ ber = comm.ErrorRate("ResetInputPort", true);
 Rs = config.Target_Data_Rate/k;
 Rb = config.Target_Data_Rate;
 Ps = minLB;
-Pn = (-150:-80)';  % Estimated noise floor of background radiation
-SNR = Ps - Pn;
-No = Pn - 10*log10(config.Bandwidth);
+No = (-231:-221)';
 Es = Ps - 10*log10(Rs);
 Eb = Es - 10*log10(k);
 EbNo = Eb - No;
 minEbNo = config.Receiver_Sensitivity + config.Min_Link_Margin ...
     - 10*log10(Rs) - 10*log10(k) - No(end);
+SNR = EbNo + 10*log10(Rb) + 10*log10(k) - 10*log10(config.Bandwidth);
 %-------------------------------------------------
 % Initialize output vectors
-berVec = zeros(length(Pn),3);
+berVec = zeros(length(EbNo),3);
 errStats = zeros(1,3);
 %% Setup FEC
 fprintf("FEC:\n");
