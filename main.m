@@ -81,23 +81,6 @@ rxfilter = comm.RaisedCosineReceiveFilter("RolloffFactor", config.RRC_Filter_Pro
 filterDelay = k * txfilter.FilterSpanInSymbols;
 % Define BER and EVM Calculators
 ber = comm.ErrorRate("ResetInputPort", true);
-%% Eb/No and SNR
-%Calculate Eb/No and SNR-------------------------
-% https://www.dsprelated.com/showarticle/168.php?msclkid=dd85b998a7bb11ec8b9235e20eafce8c
-Rs = config.Target_Data_Rate/k;
-Rb = config.Target_Data_Rate;
-Ps = minLB;
-No = (-231:-221)';
-Es = Ps - 10*log10(Rs);
-Eb = Es - 10*log10(k);
-EbNo = Eb - No;
-minEbNo = config.Receiver_Sensitivity + config.Min_Link_Margin ...
-    - 10*log10(Rs) - 10*log10(k) - No(end);
-SNR = EbNo + 10*log10(Rb) + 10*log10(k) - 10*log10(config.Bandwidth);
-%-------------------------------------------------
-% Initialize output vectors
-berVec = zeros(length(EbNo),3);
-errStats = zeros(1,3);
 %% Setup FEC
 fprintf("FEC:\n");
 disp(config.FEC);
@@ -115,9 +98,26 @@ if contains(config.FEC.Method, "LDPC", "IgnoreCase", true)
     demodulator.DecisionMethod = 'Approximate log-likelihood ratio';
 else
     % Default to 1 KB frames
+    codeRate = 1;
     bits_per_frame = 2^10;
     num_frames = (10/config.Max_BER) / bits_per_frame + 1;
 end
+%% Eb/No and SNR
+%Calculate Eb/No and SNR-------------------------
+% https://www.dsprelated.com/showarticle/168.php?msclkid=dd85b998a7bb11ec8b9235e20eafce8c
+Rs = config.Target_Data_Rate/k;
+Rb = config.Target_Data_Rate;
+BWn = Rs;  % BWn = Symbol Rate because it is a matched filter system
+Ps = minLB;
+No = (-231:-171)';
+Es = Ps - 10*log10(Rs);
+Eb = Es - 10*log10(k)- 10*log(codeRate);
+EbNo = Eb - No;
+SNR = EbNo + 10*log10(Rs) + 10*log10(k) + 10*log10(codeRate) - 10*log10(BWn);
+%-------------------------------------------------
+% Initialize output vectors
+berVec = zeros(length(EbNo),3);
+errStats = zeros(1,3);
 %% Simulation
 if contains(config.Channel.Model, "awgn", "IgnoreCase", true)
     % Theoretical BER from Eb/No
@@ -206,14 +206,12 @@ end
 %% Plot Figures
 % Plot BER
 if contains(config.Channel.Model, "awgn", "IgnoreCase", true)
-    berVec(berVec==0) = 1e-100;
     berFigure = figure;
     semilogy(EbNo,berVec(:,1));
     hold on;
     semilogy(EbNo,berTheory);
-    xline(minEbNo, '-', 'Minimum Eb/No');
+    ylim([config.Max_BER^2 1]);
     yline(config.Max_BER, '-', 'Maximum BER');
-    ylim([1e-10, 1]);
     title(['BER vs Eb/No: ', run_description]);
     legend('Simulation','AWGN Theory (no FEC)','Location','Best');
     xlabel('Eb/No (dB)');
@@ -222,15 +220,14 @@ if contains(config.Channel.Model, "awgn", "IgnoreCase", true)
     hold off;
     saveas(berFigure, "Figures/berFigure.png");
     % Calculate Spectral Efficiency
-    PsDec = 10.^(Ps/10);
-    NoDec = 10.^(No/10);
-    capcity = config.Bandwidth * log2(1 + PsDec/(NoDec*config.Bandwidth));
+    snrDec = 10.^(SNR/10);
+    capcity = config.Bandwidth * log2(1 + snrDec);
     specFigure = figure;
-    plot(No, capcity);
+    semilogy(SNR, capcity);
     hold on;
     title(['Spectral Efficiency ', run_description]);
-    xlabel('SNR (decimal)');
-    ylabel('Capacity (bits/sec');
+    xlabel('SNR (dB)');
+    ylabel('Capacity (bits/sec)');
     grid on;
     hold off;
     saveas(specFigure, "Figures/specFigure.png");
