@@ -229,7 +229,8 @@ if contains(config.Channel.Model, "awgn", "IgnoreCase", true)
     specFigure = figure;
     semilogy(SNR, capacity);
     hold on;
-    title(['Spectral Efficiency ', run_description]);
+    title(['Theoretical Spectral Efficiency at ', ...
+        config.Bandwidth/1e6, " MHz bandwidth"]);
     xlabel('SNR (dB)');
     ylabel('Capacity (bits/sec)');
     grid on;
